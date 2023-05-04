@@ -7,7 +7,8 @@ import {
 } from "@subql/frontier-evm-processor";
 //import * as instance from "../types/abi-interfaces/Erc721Abi";
 import { BigNumber } from "ethers";
-import { Erc721Abi__factory } from "../types/contracts/factories";
+import { Erc721Abi__factory } from "../types/contracts";
+import { FrontierEthProvider } from "@subql/frontier-evm-processor";
 
 // Setup types from ABI
 type TransferEventArgs = [string, string, BigNumber] & {
@@ -26,7 +27,8 @@ export async function handleTransfer(
   let transferId = event.transactionHash;
   let transfer = await Transfer.get(transferId);
   let contract = await Contract.get(event.address);
-  const instance = Erc721Abi__factory.connect(event.address, api);
+  let provider= new FrontierEthProvider;
+  const instance = Erc721Abi__factory.connect(event.address, provider );
 
 
   if (previousOwner == null) {
