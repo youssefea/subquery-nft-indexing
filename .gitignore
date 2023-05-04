@@ -55,3 +55,6 @@ Thumbs.db
 *.wmv
 
 .data/*
+
+#environment variables
+.env.local
