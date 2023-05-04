@@ -1,43 +1,114 @@
-import { Approval, Transaction } from "../types";
+import {
+	Token, Owner, Contract, Transfer,
+}  from "../types";
 import {
   FrontierEvmEvent,
   FrontierEvmCall,
 } from "@subql/frontier-evm-processor";
+//import * as instance from "../types/abi-interfaces/Erc721Abi";
 import { BigNumber } from "ethers";
+import { Erc721Abi__factory } from "../types/contracts/factories";
 
 // Setup types from ABI
 type TransferEventArgs = [string, string, BigNumber] & {
   from: string;
   to: string;
-  value: BigNumber;
-};
-type ApproveCallArgs = [string, BigNumber] & {
-  _spender: string;
-  _value: BigNumber;
+  tokenId: string;
 };
 
-export async function handleFrontierEvmEvent(
+export async function handleTransfer(
   event: FrontierEvmEvent<TransferEventArgs>
 ): Promise<void> {
-  const transaction = new Transaction(event.transactionHash);
+  
+  let previousOwner = await Owner.get(event.args.from);
+  let newOwner = await Owner.get(event.args.to);
+  let token = await Token.get(event.args.tokenId);
+  let transferId = event.transactionHash;
+  let transfer = await Transfer.get(transferId);
+  let contract = await Contract.get(event.address);
+  const instance = Erc721Abi__factory.connect(event.address, api);
 
-  transaction.value = event.args.value.toBigInt();
-  transaction.from = event.args.from;
-  transaction.to = event.args.to;
-  transaction.contractAddress = event.address;
 
-  await transaction.save();
-}
+  if (previousOwner == null) {
+    previousOwner = new Owner(event.args.from);
 
-export async function handleFrontierEvmCall(
-  event: FrontierEvmCall<ApproveCallArgs>
-): Promise<void> {
-  const approval = new Approval(event.hash);
+    previousOwner.balance = BigInt(0);
+  } else {
+    let prevBalance = previousOwner.balance;
+    if (prevBalance > BigInt(0)) {
+      previousOwner.balance = prevBalance - BigInt(1);
+    }
+  }
 
-  approval.owner = event.from;
-  approval.value = event.args._value.toBigInt();
-  approval.spender = event.args._spender;
-  approval.contractAddress = event.to;
+  if (newOwner == null) {
+    newOwner = new Owner(event.args.to);
+    newOwner.balance = BigInt(1);
+  } else {
+    let prevBalance = newOwner.balance;
+    newOwner.balance = prevBalance + BigInt(1);
+  }
 
-  await approval.save();
+  if (token == null) {
+    token = new Token(event.args.tokenId);
+    token.contractId = event.address;
+
+    try
+    {
+      let uri = await  instance.tokenURI(event.args.tokenId);
+      if (!uri==null) {
+        token.uri = uri;
+      }
+    }
+    catch(e){}
+  }
+
+  token.ownerId = event.args.to;
+
+  if (transfer == null) {
+    transfer = new Transfer(transferId);
+    transfer.tokenId = event.args.tokenId;
+    transfer.fromId = event.args.from;
+    transfer.toId = event.args.to;
+    transfer.timestamp = BigInt(event.blockTimestamp.getTime());
+    transfer.block = BigInt(event.blockNumber);
+    transfer.transactionHash = event.transactionHash;
+  }
+
+  if (contract == null) {
+    contract = new Contract(event.address);
+  }
+
+  try
+    {
+      let name = await  instance.name();
+      if (!name==null) {
+        contract.name = name;
+      }
+    }
+  catch(e){}
+
+  try
+    {
+      let symbol = await  instance.symbol();
+      if (!symbol==null) {
+        contract.symbol = symbol;
+      }
+    }
+  catch(e){}
+
+  try
+    {
+      let totalSupply = await  instance.totalSupply();
+      if (!totalSupply==null) {
+        contract.totalSupply = BigInt(totalSupply.toString());
+      }
+    }
+  catch(e){}
+
+  previousOwner.save();
+  newOwner.save();
+  token.save();
+  contract.save();
+  transfer.save();
+  
 }
